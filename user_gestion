@@ -1,0 +1,286 @@
+#!/bin/bash
+if [ $# -eq 0 ];
+then
+
+#While : fait tourner le menu en boucle tant que les numéros ne sont pas bon.
+while :
+do
+echo -n "------- MENU PRINCIPAL -------
+|Tapez 1 : Add user          |
+|Tapez 2 : Modifier user     |
+|Tapez 3 : Supprimer user    |
+|Tapez 4 : Afficher Info User|
+|Tapez 5 : Backup User       |
+|Tapez 6 : Restore User      |
+|Tapez 7 : Quit              |
+------------------------------
+|N° saisie : "
+
+function ajouterutilisateur # ajoute un utilisateur
+{
+	sudo useradd -m "$adduser" -p "$cpsd" -o -u "$uid" -d /home/"$adduser" -g "$groupe" #Create new user
+}
+
+function modifinom # Modifie le nom et repertoire
+{
+	sudo usermod -d /home/"$newuser" -m -l "newuser" "$olduser"
+}
+
+function modifiuid # Modifie IUD avec option login user derriere
+{
+	sudo usermod -o -u "$newuid" "$olduser" 
+}
+
+function suputil # Supprime Utilisateur
+{
+	sudo userdel -r "$user" Supprime user et home repertoire
+}
+
+function affichernomutil # Affiche information de l'utilisateur /nom
+{
+	cat /etc/passwd | grep -w "$user" | cut -d ":" -f 1
+}
+
+function afficheruidtil # Affiche information de l'utilisateur / uid
+{
+	cat /etc/passwd | grep -w "$user" | cut -d ":" -f 3
+}
+
+function afficherhomedtil # Affiche information de l'utilisateur / home
+{
+	cat /etc/passwd | grep -w "$user" | cut -d ":" -f 6
+}
+
+function  affichergroups # Affiche information de l'utilisateur / groups
+{
+	groups "$user" | cut -d ":" -f 2
+}
+
+function archivetar #Créer archive
+{
+	repertoire=$(cat /etc/passwd | grep -w "$user" | head -1 | cut -d ":" -f 6)
+	date=$(date +%y.%m.%d)
+	sudo tar -cvf "$user"."$date".tar "$repertoire"
+}
+
+function backuptar #Backup et ouverture archive
+{
+	old=$(ls -got | grep -w "$user" | head -1 | awk {print$4} | cut -d " " -f 9) #Affiche la plus vielle archive
+	tar -xvf "$old" -C /home/user/ 
+}
+
+read choice #Créer une variable choice
+	case $choice in
+	1)
+	echo -n "Entrer un nom d'utilisateur : " #-n Evite de sauter une ligne
+	read adduser
+	
+#---Vérifie si le nom user existe déjà
+	exist=$(cat /etc/passwd | grep "$user" | cut -d ":" -f "1")
+	for i in $exist;
+	do
+	if [ $i = $adduser ];
+	then
+	echo -n "Cette utilisateur existe déjà
+	Entrer un nom d'utilisateur : " #-n Evite de sauter une ligne
+	read adduser
+	fi
+	done
+	
+#---Entrer mot de passe
+	echo -n "Entrer un password : " 
+	read pwd
+	cpsd=$(sudo openssl passwd $pwd) &> /dev/null #Crypte le mot de passe 
+	
+	#Vérifie le mot de passe si vide
+	while [ -z "$pwd" ];
+	do
+	echo -n "Entrer un password SVP, non vide ! : " 
+	read pwd
+	cpsd=$(sudo openssl passwd $pwd) 
+	done
+	
+#---Vérifie le mot est plus court que 8 caractères
+	while [ ${#pwd} -gt 8 ]; #"${#VAR}" définit la taille de la variable
+	do
+	echo -n "Entrer un password SVP, moins long que 8 caractères ! : " 
+	read pwd
+	cpsd=$(sudo openssl passwd $pwd) 
+	done
+	
+#---Entrer l'UID
+	echo -n "Entrer un UID : " 
+	read uid
+	while [ $uid -gt 1000 ]; 
+	do
+	echo -n "Entrer un UID valable SVP : " 
+	read uid
+	done
+
+	echo -n "Entrer un groupe : " 
+	read groupe
+	ajouterutilisateur #Appel la fonction "Name_Fonction"
+
+#---Vérifie si le groupe existe
+	ligne=$(cat /etc/group | grep -w "$groupe"":x" | cut -d ":" -f 1) 
+	while [ -z $ligne ];
+	do
+	echo -n "Entrer un groupe valide : " 
+	read groupe
+	ajouterutilisateur
+	ligne=$(cat /etc/group | grep -w "$groupe"":x" | cut -d ":" -f 1)
+	done
+	;;
+	
+#---Modifier le nom d'utilisateur ou UID
+	2)
+	while :
+	do
+	echo -n "Menu :
+	Tapez 1 : Modifier name user
+	Tapez 2 : Modifier UID
+	Tapez 3 : Quit
+	N° saisie : "
+	read moduser #Définir avant case variable à saisir
+	
+	#---Modifier le nom d'utilisateur 
+		case $moduser in
+		1)
+		echo -n "Entrer l'ancien nom d'utilisateur : " 
+		read olduser
+		
+		#-------Vérifie si le nom user existe déjà
+		exist=$(cat /etc/passwd | cut -d ":" -f "1" | grep -w "$olduser")
+		while [ -z "$exist" ];
+		do
+		echo -n "Entrer un ancien nom d'utilisateur qui existe : " 
+		read olduser
+		exist=$(cat /etc/passwd | cut -d ":" -f "1" | grep -w "$olduser")
+		done
+	
+		echo -n "Entrer le nouveau d'utilisateur : " 
+		read newuser
+		modifinom  
+		
+		#-------Vérifie si le nom user n'existe pas déjà
+		exist=$(cat /etc/passwd | cut -d ":" -f "1" | grep -w "$newuser")
+		echo "$exist"
+		while [ -n "$exist" ];
+		do
+		echo -n "Entrer le nouveau d'utilisateur qui n'existe pas : " 
+		read newuser
+		modifinom
+		exist=$(cat /etc/passwd | cut -d ":" -f "1" | grep -w "$newuser")
+		done
+		;;
+		
+		#-------Modifie l'UID
+		2)
+		echo -n "Entrer le nom d'utilisateur pour modifier l'UID : " 
+		read olduser
+		
+		#-------Vérifie si le nom user existe déjà
+		exist=$(cat /etc/passwd | cut -d ":" -f "1" | grep -w "$olduser")
+		while [ -z "$exist" ];
+		do
+		echo -n "Entrer un ancien nom d'utilisateur qui existe : " 
+		read olduser
+		exist=$(cat /etc/passwd | cut -d ":" -f "1" | grep -w "$olduser")
+		done
+		
+		echo -n "Entrer le nouveau UID :" 
+		read newuid
+		modifiuid
+		while [ $newuid -gt 1000 ]; 
+		do
+		echo -n "Entrer un UID valable SVP : " 
+		read newuid
+		done
+		;;
+		
+		3)
+		break
+		;;
+		
+		*)
+		echo "Veuillez entrer un menu valide"
+		;;
+		esac 	
+		done
+	;;
+	
+	#-------Supprime l'utilisateur
+	3)
+	echo -n "Entrer le nom d'utilisateur à supprimer : " 
+	read user
+	suputil
+	;;
+	
+	#-------Information Utilisateur
+	4)
+	echo -n "Entrer le nom d'utilisateur dont vous voulez voir les informations : " 
+	read user
+	echo -n "Le nom du user est : "  
+	affichernomutil
+	echo "------------------------" 
+	echo -n "Le numéro d'IUD est : " 
+	afficheruidtil
+	echo "------------------------" 
+	echo -n "Le chemin d'acces au user est : " 
+	afficherhomedtil
+	echo "------------------------" 
+	echo -n "Le groupe auquel le user appartient est : " 
+	echo $(groups "$user" | cut -d ":" -f 2)
+	;;
+	
+	#-------Archive le dossier home
+	5)
+	echo -n "Entrer le nom d'utilisateur dont vous voulez archiver : " 
+	read user
+	archivetar
+	echo -n " Le backup du home a été fait" 
+	;;
+	
+	#-------Dézipe le backup fait avant
+	6)
+	echo -n "Entrer le nom d'utilisateur dont vous voulez le backup: " 
+	read user
+	backuptar
+	echo -n " Le backup du home a été extrait" 
+	;;
+	
+	#-------Quit
+	7)
+	exit 0
+	;;
+	
+	*)
+	echo "Veuillez entrer un menu valide"
+	;;
+	esac
+done
+else
+#getopts pour le backup et dézipe
+while getopts ":z:b:e:" option;
+do
+case $option in
+z)
+repertoire=$(cat /etc/passwd | grep -w "$2" | cut -d ":" -f 6)
+echo $repertoire
+date=$(date +%y.%m.%d)
+#sudo tar -cvf "$2"."$date".tar "$repertoire"
+echo "Le backup a été effectué"
+;;
+b)
+old=$(ls -got | grep -w "$2" | head -1 | awk {print$4} | cut -d " " -f 9) #Affiche la plus vielle archive
+tar -xvf "$old" -C /home/user/
+echo "Le backup a été dézipper"
+;;
+e)
+old=$(ls -got | grep -w "$2" | head -1 | awk {print$4} | cut -d " " -f 9) #Affiche la plus vielle archive
+tar -xvf "$old" -C "$3"
+echo "Le backup a été dézipper dans ""$3"
+;;
+esac
+done
+fi
