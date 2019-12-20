@@ -1,0 +1,368 @@
+#!/bin/bash
+
+############################################
+# Variables globales                       #
+############################################
+
+vmname=""
+ip=""
+lip="2"
+uip="254"
+hostif="vboxnet0"
+netm="255.255.255.0"
+vdiname="disk"
+vdidirectory=""
+OPERATION=""
+vdi=""
+shared=""
+ostype="Other"
+ram="512"
+nsnap=""
+taille="20000"
+
+######################################
+#Fonction qui executes les commandes.#
+######################################
+## Ne pas oublier function et le saut de ligne après le nom de la fonction
+function createvm # Créer notre VM
+{
+VBoxManage createvm -name "$vmname" -ostype  "$ostype" --register
+}
+
+function listvm # Liste des vm
+{
+VBoxManage list vms
+}
+
+function list # Liste les os
+{
+VBoxManage list ostypes
+}
+
+function ramvm # Changement de la ram
+{ 
+VBoxManage modifyvm "$vmname" --memory "$ram"
+}
+
+function sharef # Dossier de partage
+{
+VBoxManage sharedfolder add "$vmname" --name sharename --hostpath "$shared"
+}
+
+function hostvm # Créer une interface réseau sans ip mais avec un nom auto
+{ 
+VBoxManage hostonlyif create
+}
+
+function iphostvm # Donne une IP fixe à la carte
+{ 
+VBoxManage hostonlyif ipconfig "$hostif" --ip "$ip"
+}
+
+function dhcpvm # Ajoute un dhcp selon nos parametres sur le réseau
+{ 
+VBoxManage dhcpserver add --ifname "$hostif" --ip "$ip" --netmask "$netm" --lowerip "$lip" --upperip "$uip" --enable
+}
+
+function dhcpenable # Active le DHCP sur une des interfaces définit auparavant
+{
+VBoxManage dhcpserver modify --ifname "$hostif" --enable
+}
+
+function addhostvm # Ajouter l'interface réseau créer précédement sur une machine virtuel existante
+{ 
+VBoxManage modifyvm "$vmname" --hostonlyadapter1 "$hostif"
+VBoxManage modifyvm "$vmname" --nic1 hostonly
+}
+
+function createvdi
+{
+VBoxManage createmedium disk --filename "$vdiname" --size "$taille"
+}
+
+function vdiconnect
+{
+# Format du link disk
+VBoxManage storagectl "$vmname" --name "$vdiname" --add ide
+# Connection disque virtuel à interface de connection
+VBoxManage storageattach "$vmname" --storagectl "$vdiname" --port 0 --device 0 --type hdd --medium "$vdi"
+}
+
+function createsnap
+{
+VBoxManage snapshot "$vmname" take "$nsnap" --pause
+}
+
+function lastsnap
+{
+VBoxManage snapshot "$vmname" restorecurrent
+}
+
+function startvm # Lancement de la vm
+{
+VBoxManage startvm "$vmname"
+}
+
+function stopvm # Arrêt de la vm
+{
+VBoxManage controlvm "$vmname" poweroff
+}
+
+function deletevm
+{
+VBoxManage unregistervm --delete "$vmname"
+}
+
+######################################
+##  Gestion des options pour la vm:  #
+######################################
+while getopts "n:o:r:a:i:d:l:c:f:s:t:m:u:j:q:" option;
+do
+case $option in
+
+n) 
+vmname="${OPTARG}" # Donner le nom de la machine
+;;
+
+q) # Chemin access pour partage
+shared="${OPTARG}"
+;;
+
+o) 
+ostype="${OPTARG}" # L'OS à définir
+;;
+
+r)
+ram="${OPTARG}" # La ram
+;;
+
+a)
+hostif="${OPTARG}" # Carte de la machine
+;;
+
+i)
+ip="${OPTARG}" # Met une ip fixe ou active le dhcp selon l'option choisit voir plus loin dans le code, les options.
+;;
+
+m)
+netm="${OPTARG}" # Masque sous réseau
+;;
+
+u)
+uip="${OPTARG}" # Ip a plus haute
+;;
+
+j)
+lip="${OPTARG}" # Ip la plus base
+;;
+
+l)
+vmname="${OPTARG}" # Boot la machine virtuel
+startvm
+;;
+
+d)
+vmname="${OPTARG}" # Stop la machine virtuel
+stopvm
+;;
+
+c)
+vdiname="${OPTARG}" # Nom du disque
+;;
+
+t)
+taille="${OPTARG}" # Taille en ko 
+;;
+
+f)
+vdi="${OPTARG}" # Chemin access
+;;
+
+s)
+nsnap="${OPTARG}" # Snap
+;;
+
+:)
+echo "L'option $OPTARG requiert un argument."
+exit 1
+;;
+
+\?)
+echo "$OPTARG : option invalide | Saisir options pour plus d'information"
+exit 2
+;;
+
+esac
+
+done
+
+######################################
+##     Option après  commande       ##
+######################################
+shift $(($OPTIND - 1)) # dÃ©cale $1 aprÃ¨s les options. Ce qui signifie que le premier argument devient l'opÃ©ration Ã  effectuer
+OPERATION=$1
+case "${OPERATION}" in
+
+create) # Créer notre VM
+createvm 
+;;
+
+ram) # Changer la ram
+ramvm 
+echo "Ram changée"
+;;
+
+share) # Dossier de partage host/machine
+sharef
+;;
+
+addhost) # Ajout host virtuel
+hostvm
+;;
+
+aos) # Affiche la liste des vm
+listvm
+;;
+
+listos) # Affiche les os possible
+list
+;;
+
+link) # Plage ip pour le dhcp
+ip1=$(echo $ip | cut -d "." -f 1)
+ip2=$(echo $ip | cut -d "." -f 2)
+ip3=$(echo $ip | cut -d "." -f 3)
+lip=$(echo "$ip1"."$ip2"."$ip3"."$lip")
+uip=$(echo "$ip1"."$ip2"."$ip3"."$uip")
+echo "La plage d'ip du DHCP sera de $lip à $uip"
+dhcpvm
+;;
+
+linkp) # Plage ip pour le dhcp manuel
+dhcpvm
+;;
+
+dhcp) # Activation DHCP sur carte
+dhcpenable
+echo "Le DHCP sur la carte $hostif est configurée"
+;;
+
+fixe) # IP Fixe
+iphostvm
+;;
+
+host) # Lier une carte réseau virtuel à une vm
+addhostvm
+;;
+
+disk) # Création d'un disque
+createvdi
+;;
+
+diskvm) # Connection disque à une machine virtuel
+vdiconnect
+;;
+
+shot) # Sreenshot
+createsnap
+;;
+
+last) # Last screenshot
+lastsnap
+;;
+
+delete)
+deletevm
+;;
+
+options)
+echo 
+"
+#######################################################
+## Liste des options pour les commandes possibles    ##
+#######################################################
+
+-n [nom de la machine virtuel] / Exemple : -n Machine
+-o [Version de l'os] / Exemple : -o Windows10
+-q [Répertoire du dossier de partage entre VM et Machine]
+-r [ [Type : string] / Taille de votre ram pour la machine virtuel] / Exemple : -r 1024
+-a [Nom de la carte virtuel] / Exemple : -a vboxnet0
+-i [IP] / Exemple : -i 192.168.0.1
+-m [Masque de sous réseau] / Exemple : -m 255.255.255.0
+-u [IP up] / Exemple : -u 192.168.0.100
+-j [IP down] / Exemple : -j 192.168.0.2
+-l [Nom de la Machine Virtuel] - Lance votre machine Virtuel / Exemple : -l Machine
+-d [Nom de la Machine Virtuel] - Stop votre machine Virtuel / Exemple : -d Machine
+-c [Nom de votre disque virtuel] / Exemple : -c disk.vdi 
+WARNING : Attention à bien mettre le type d'extension de disque à la fin 
+car par défaut c'est toujours du VDI si ce n'est pas renseigné.
+-f [Nom de votre disque virtuel avec l'extension] / Exemple : -f disk.vdi 
+-s [Nom de la capture d'écran]"
+;;
+
+*)
+echo
+"
+#################################################
+##             Liste des Commandes             ##
+#################################################
+|Création d'une VM :                            |
+|-n [Nom de la vm] -o [OS] create               |
+-------------------------------------------------
+|Changer la taille de la ram d VM :             |
+|-n [Nom de la vm] -r [Taille de la ram] ram    |
+-------------------------------------------------
+|Ajouter une dossier de partage                 |
+|-n [Nom de la vm] -q ['Répertoire']     share  |
+-------------------------------------------------
+|Ajout d'une IP sur la carte virtuel            |
+|-a [Nom de la carte] -ip [IP] fixe             |
+-------------------------------------------------
+|Créer un DHCP et ajouter une plage d'ip sur une|
+|carte virtuel                                  |
+|-a [Nom de la carte] -i [IP] link              |
+|Le masque de sous réseau est définit part      |
+|défaut ainsi que la plage d'ip                 |
+-------------------------------------------------
+|Créer un DHCP et ajouter une plage d'ip sur une|
+|carte virtuel en manuel                        |--------------------------------------
+|-a [Nom de la carte] -i [IP] -m [Masque de sous réseau] -j [IP Down] -u [IP up] linkp|
+---------------------------------------------------------------------------------------
+|Activer le DHCP sur une carte virtuel          |
+|-a [Nom de la carte] dhcp                      |
+-------------------------------------------------
+|Lier la carte virtuel à une machine virtuel    |
+|-n [Nom de la vm] -a [Nom de la carte] host    |
+-------------------------------------------------
+|Création d'un disque virtuel avec 20000Ko par  |
+|defaut                                         |
+|-c [nom du disque.extension] disk              |
+-------------------------------------------------
+|Création d'un disque virtuel                   |--------
+|-c [nom du disque.extension] -t [taille du disque] disk|
+---------------------------------------------------------
+|Lier un disque avec une VM                     |------------------
+|-n [Nom de la vm] -c [nom du disque] -f [nom du disque.extension]|
+-------------------------------------------------------------------
+|Faire une capture d'écran                      |
+|-n [Nom de la vm] -s [nom de la capture] shot  |
+-------------------------------------------------
+|Afficher la dernière capture d'écran           |
+|-n [Nom de la vm] last                         |
+-------------------------------------------------
+|Suppression d'une VM                           |
+|-n [Nom de la vm] delete                       |
+-------------------------------------------------
+|Afficher les options des commandes             |
+|commande                                       |
+-------------------------------------------------
+aos  | Affiche la liste de VM existantes
+listos | Affiche la liste des os possible
+addhost | Créer une carte virtuel par défaut, exemple vboxnet0, etc...
+-l [Nom de la Machine Virtuel] - Lance votre machine Virtuel / Exemple : -l Machine
+-d [Nom de la Machine Virtuel] - Stop votre machine Virtuel / Exemple : -d Machine
+"
+;;
+
+esac
+
