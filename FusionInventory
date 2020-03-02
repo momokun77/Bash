@@ -2,6 +2,6 @@
 wget https://github.com/fusioninventory/fusioninventory-agent/releases/download/2.5.1/FusionInventory-Agent-2.5.1.tar.gz
 tar -xvf FusionInventory-Agent-2.5.1.tar.gz 
 cd FusionInventory-Agent-2.5.1/   
-Makefile.PL
+#Makefile.PL
 perl Makefile.PL 2>&1 | grep prerequisite | awk '{print $3}' | while read a; do cpan --notest -f -i $a; done;
 fusioninventory-agent -s https://srv-expl03.api.local/glpi/plugins/fusioninventory/ --no-ssl-check
